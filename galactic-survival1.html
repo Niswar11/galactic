@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Galactic Survival & Bio-Mechanical Auditor</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;500;700&display=swap');
+
+body{
+margin:0;
+font-family:'Inter', sans-serif;
+background: radial-gradient(ellipse at bottom, #0b0f1a 0%, #05070d 100%);
+color:#f1f3f8;
+overflow-x:hidden;
+}
+
+body::before{
+content:"";
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:
+radial-gradient(2px 2px at 20% 30%, white, transparent),
+radial-gradient(1px 1px at 70% 80%, white, transparent),
+radial-gradient(1.5px 1.5px at 40% 60%, white, transparent),
+radial-gradient(1px 1px at 90% 20%, white, transparent);
+background-size:100% 100%;
+opacity:0.15;
+pointer-events:none;
+z-index:0;
+}
+
+header{
+padding:25px;
+text-align:center;
+font-size:26px;
+font-weight:600;
+letter-spacing:1px;
+background:rgba(255,255,255,0.03);
+border-bottom:1px solid rgba(255,255,255,0.05);
+backdrop-filter:blur(8px);
+position:relative;
+z-index:1;
+}
+
+.controls{
+text-align:center;
+padding:30px 10px;
+position:relative;
+z-index:1;
+}
+
+input[type=range]{width:300px;accent-color:#888;}
+.mass-display{margin-top:10px;font-size:16px;opacity:0.8;}
+
+button{
+background:rgba(255,255,255,0.06);
+border:1px solid rgba(255,255,255,0.1);
+color:#f1f3f8;
+padding:8px 16px;
+border-radius:6px;
+cursor:pointer;
+transition:0.3s ease;
+}
+button:hover{background:rgba(255,255,255,0.12);}
+
+.grid{
+display:grid;
+grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+gap:20px;
+padding:30px;
+position:relative;
+z-index:1;
+}
+
+.card{
+background:rgba(255,255,255,0.04);
+border:1px solid rgba(255,255,255,0.06);
+padding:20px;
+border-radius:12px;
+transition:0.3s ease;
+cursor:pointer;
+backdrop-filter:blur(6px);
+}
+.card:hover{transform:translateY(-4px);background:rgba(255,255,255,0.07);}
+.card h3{margin:0;font-weight:600;font-size:18px;}
+.card p{margin:6px 0;font-size:14px;opacity:0.8;}
+
+.modal{
+display:none;
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.85);
+justify-content:center;
+align-items:center;
+z-index:1000;
+}
+
+.modal-content{
+background:#0e1322;
+padding:30px;
+border-radius:14px;
+width:90%;
+max-width:600px;
+box-shadow:0 10px 40px rgba(0,0,0,0.5);
+animation:fadeIn 0.4s ease;
+}
+@keyframes fadeIn{from{opacity:0;transform:scale(0.95);}to{opacity:1;transform:scale(1);}}
+
+.gauge{margin-top:20px;height:20px;border-radius:20px;background:#1b2236;overflow:hidden;}
+.fill{height:100%;width:50%;transition:width 0.8s ease;}
+.optimal{background:#4caf50;}
+.stressed{background:#ff9800;}
+.lethal{background:#d32f2f;}
+.status-text{margin-top:12px;font-weight:500;}
+
+#voiceStatus{display:block;margin-top:8px;font-size:14px;opacity:0.7;}
+
+::-webkit-scrollbar{width:8px;}
+::-webkit-scrollbar-thumb{background:#444;border-radius:10px;}
+
+.character.crushed{color:red;font-weight:700;margin:10px 0;}
+</style>
+</head>
+<body>
+
+<header>
+🚀 Galactic Survival & Bio-Mechanical Auditor (100 Objects Edition)
+</header>
+
+<div class="controls">
+Mass (kg):
+<input type="range" id="mass" min="40" max="150" value="70">
+<span id="massValue">70</span> kg
+<br>
+<input type="text" id="search" placeholder="Search object...">
+<select id="filter">
+<option value="all">All</option>
+<option value="habitable">Habitable Only</option>
+<option value="extreme">Extreme Only</option>
+</select>
+<br>
+<button onclick="startVoice()">🎤 Voice Control</button>
+<span id="voiceStatus"></span>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="modal" id="modal">
+<div class="modal-content">
+<button id="closeBtn">X</button>
+<h3 id="title"></h3>
+<div class="character" id="character"></div>
+<div class="gauge"><div class="fill" id="fill"></div></div>
+<p id="details"></p>
+<canvas id="chart" height="150"></canvas>
+<button onclick="exportPDF()">Export Report PDF</button>
+</div>
+</div>
+
+<footer>
+Class 9 Physics Based • Newton’s Law of Gravitation • Pressure • Thrust
+</footer>
+
+<script>
+const massSlider = document.getElementById("mass");
+const massValue = document.getElementById("massValue");
+massSlider.oninput = () => massValue.innerText = massSlider.value;
+
+const gEarth = 9.80665;
+const celestialBodies = [];
+
+// ---------- PLANETS ----------
+const planets=[
+["Mercury",3.7,0,167,"Terrestrial"],
+["Venus",8.87,92,464,"Terrestrial"],
+["Earth",9.81,1,15,"Terrestrial"],
+["Mars",3.71,0.01,-65,"Terrestrial"],
+["Jupiter",24.79,1000,-110,"Gas Giant"],
+["Saturn",10.44,1000,-140,"Gas Giant"],
+["Uranus",8.69,500,-195,"Ice Giant"],
+["Neptune",11.15,1000,-200,"Ice Giant"]
+];
+planets.forEach(p=>celestialBodies.push({name:p[0],gravity:p[1],pressure:p[2],temp:p[3],type:p[4]}));
+
+// ---------- MOONS ----------
+const moons=["Moon","Phobos","Deimos","Io","Europa","Ganymede","Callisto",
+"Titan","Rhea","Iapetus","Dione","Tethys","Enceladus","Mimas",
+"Triton","Charon","Oberon","Titania","Umbriel","Ariel","Miranda","Proteus"];
+moons.forEach(m=>celestialBodies.push({name:m,gravity:0.5+Math.random()*2.5,pressure:Math.random()*1,temp:-200+Math.random()*200,type:"Moon"}));
+
+// ---------- DWARF PLANETS ----------
+["Pluto","Eris","Haumea","Makemake","Ceres"].forEach(d=>celestialBodies.push({name:d,gravity:0.6+Math.random()*1,pressure:0,temp:-220+Math.random()*100,type:"Dwarf Planet"}));
+
+// ---------- ASTEROIDS ----------
+["Vesta","Pallas","Hygiea","Eros","Bennu"].forEach(a=>celestialBodies.push({name:a,gravity:0.2,pressure:0,temp:-100,type:"Asteroid"}));
+
+// ---------- EXOPLANETS ----------
+for(let i=1;i<=30;i++){
+celestialBodies.push({name:"Kepler-"+(i+10)+"b",gravity:5+Math.random()*20,pressure:Math.random()*50,temp:-50+Math.random()*500,type:"Exoplanet"});
+}
+
+// ---------- STARS ----------
+["Sun","Sirius","Betelgeuse","Rigel","Vega","Proxima Centauri",
+"Alpha Centauri A","Alpha Centauri B","Altair","Aldebaran",
+"Spica","Polaris","Deneb","Antares","Barnard's Star"].forEach(s=>celestialBodies.push({name:s,gravity:200+Math.random()*300,pressure:1000000,temp:3000+Math.random()*10000,type:"Star"}));
+
+// ---------- EXTREME OBJECTS ----------
+["Sagittarius A*","TON 618","Cygnus X-1","M87 Black Hole",
+"V404 Cygni","PSR J1748","Magnetar SGR 1806",
+"Neutron Star RX J1856","XTE J1118","LMC X-1",
+"GRS 1915","Black Hole X-3","PSR B1509",
+"SGR 1900","PSR J0108"].forEach(e=>celestialBodies.push({name:e,gravity:100000,pressure:100000000,temp:1000000,type:"Black Hole"}));
+
+// ---------- RENDER CARDS ----------
+const grid = document.getElementById("grid");
+function render(){
+grid.innerHTML="";
+let search=document.getElementById("search").value.toLowerCase();
+let filter=document.getElementById("filter").value;
+
+celestialBodies.forEach(body=>{
+if(!body.name.toLowerCase().includes(search)) return;
+if(filter==="habitable" && !(body.gravity>8&&body.gravity<12&&body.pressure<=2&&body.temp>-30&&body.temp<50)) return;
+if(filter==="extreme" && !(body.gravity>20||body.pressure>10||body.type==="Black Hole")) return;
+
+let card=document.createElement("div");
+card.className="card";
+card.innerHTML=`<strong>${body.name}</strong><br>${body.type}`;
+card.onclick=()=>analyze(body);
+grid.appendChild(card);
+});
+}
+render();
+document.getElementById("search").oninput=render;
+document.getElementById("filter").onchange=render;
+
+// ---------- ANALYZE ----------
+let chartInstance=null;
+function speak(text){
+if('speechSynthesis' in window){const utter=new SpeechSynthesisUtterance(text);window.speechSynthesis.speak(utter);}
+}
+
+function analyze(body){
+const mass=parseFloat(massSlider.value);
+const weight=mass*body.gravity;
+let score=100;
+if(weight>4000) score-=35;
+if(body.pressure>5) score-=25;
+if(body.gravity>15) score-=20;
+if(body.temp>60||body.temp<-40) score-=20;
+if(body.type==="Black Hole") score=0;
+if(score<0) score=0;
+
+let status;
+const fill=document.getElementById("fill");
+fill.className="fill";
+
+if(score>=75){status="OPTIMAL";fill.classList.add("optimal");}
+else if(score>=40){status="STRESSED";fill.classList.add("stressed");}
+else{status="LETHAL";fill.classList.add("lethal");}
+
+fill.style.width=score+"%";
+const jump=gEarth/body.gravity;
+
+document.getElementById("title").innerText=body.name;
+document.getElementById("details").innerHTML=
+`Gravity: ${body.gravity.toFixed(2)} m/s²<br>
+Pressure: ${body.pressure.toFixed(2)} atm<br>
+Temp: ${body.temp.toFixed(2)} °C<br>
+Your Weight: ${weight.toFixed(2)} N<br>
+Jump Height: ${jump.toFixed(2)} m<br>
+Survival Status: ${status}`;
+
+const char=document.getElementById("character");
+char.classList.remove("crushed");
+if(status==="LETHAL") char.classList.add("crushed");
+
+if(chartInstance) chartInstance.destroy();
+chartInstance=new Chart(document.getElementById("chart"),{
+type:'bar',
+data:{labels:["Earth","Selected"],datasets:[{label:"Gravity (m/s²)",data:[gEarth,body.gravity]}]},
+options:{plugins:{legend:{display:false}}}
+});
+
+speak(`Mission Control Update. ${body.name} selected. Surface gravity is ${body.gravity} meters per second squared. Atmospheric pressure is ${body.pressure} atmospheres. Survival condition is ${status}.`);
+
+document.getElementById("modal").style.display="flex";
+}
+
+// ---------- CLOSE ----------
+document.getElementById("closeBtn").onclick=()=>document.getElementById("modal").style.display="none";
+window.onclick=e=>{if(e.target===document.getElementById("modal")) document.getElementById("modal").style.display="none";}
+document.addEventListener("keydown",e=>{if(e.key==="Escape") document.getElementById("modal").style.display="none";});
+
+// ---------- PDF ----------
+async function exportPDF(){
+const { jsPDF } = window.jspdf;
+const doc=new jsPDF();
+doc.setFont("courier");
+doc.text("Galactic Survival Report",20,20);
+doc.text(document.getElementById("details").innerText,20,40);
+doc.save("Survival_Report.pdf");
+}
+
+// ---------- VOICE CONTROL ----------
+let recognition;
+function startVoice(){
+if(!('webkitSpeechRecognition' in window)){alert("Voice recognition only works in Chrome.");return;}
+recognition = new webkitSpeechRecognition();
+recognition.continuous=false;
+recognition.lang="en-US";
+document.getElementById("voiceStatus").innerText="Listening...";
+recognition.onresult = function(event){
+let command = event.results[0][0].transcript.toLowerCase();
+document.getElementById("voiceStatus").innerText="Heard: "+command;
+processCommand(command);
+};
+recognition.onerror=function(){document.getElementById("voiceStatus").innerText="Error listening.";}
+recognition.start();
+}
+
+function processCommand(command){
+if(command.includes("close")){document.getElementById("modal").style.display="none";return;}
+if(command.includes("mass")){
+let number=command.match(/\d+/);
+if(number){massSlider.value=number[0];massValue.innerText=number[0];}return;
+}
+celestialBodies.forEach(body=>{if(command.includes(body.name.toLowerCase())) analyze(body);});
+}
+</script>
+</body>
+</html>
